@@ -42,15 +42,13 @@ f:SetScript("OnUpdate",function(s,elapsed)
         s.sinceLastUpdate = s.sinceLastUpdate + elapsed
         if s.sinceLastUpdate >= s.freq then
             s.sinceLastUpdate = 0
-            local delete = {}
             for expire,dmg in pairs(s.dmgs) do
                 if GetTime() >= expire then
                     s.dmg = s.dmg - dmg
                     table.insert(delete,expire)
+                else
+                  s.dmgs[expire] = nil
                 end
-            end
-            for _,t in pairs(delete) do
-                s.dmgs[t] = nil
             end
             s.m = tonumber(GetSpellDescription(f.mastery):match("%d+")) / 100 + 1
             s.pre = s:Predict()
