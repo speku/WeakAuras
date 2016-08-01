@@ -31,6 +31,7 @@ function f:Init()
     self.mastery = GetSpellInfo(155783)
     self.frenzied = GetSpellInfo(22842)
     self.goe = GetSpellInfo(155578)
+    self.nd = GetSpellInfo(211160)
     self.m = 1
     self.dmg = 0
     self.sinceLastUpdate = 0
@@ -46,10 +47,15 @@ function f:Init()
 end
 function f:Predict()
     local ch = self.dmg * 0.5
+    local nd
+    do
+      local b,_,_,c = UnitBuff(p,self.nd)
+      nd = b and 1 + c * (1/3) or 1
+    end
     local b = UnitBuff(p,self.goe)
     local m = b and 1.2 or 1
     local v = GetCombatRatingBonus(CR_VERSATILITY_DAMAGE_DONE) / 100 + 1
-    self.pre = (ch > self.minHeal and ch or self.minHeal) * self.m * m * v * self.wf
+    self.pre = (ch > self.minHeal and ch or self.minHeal) * self.m * m * v * self.wf * nd
     self.currentClr = (self.goet and b and self.clrUseTwo) or (self.goet and self.clr) or self.clrUseTwo
 end
 function f:Health()
@@ -61,7 +67,7 @@ f:SetScript("OnUpdate",function(s,elapsed)
         s.sinceLastUpdate = s.sinceLastUpdate + elapsed
         if s.sinceLastUpdate >= s.freq then
             s.sinceLastUpdate = 0
-            s:Clean(s.freq)
+            s:Clean(s.freq/2)
             s.m = tonumber(GetSpellDescription(f.mastery):match("%d+")) / 100 + 1
             s:Predict()
         end
