@@ -1,4 +1,14 @@
 local p = "player"
+local relevantDmg = {
+    SPELL_DAMAGE = 15,
+    SPELL_PERIODIC_DAMAGE = 15,
+    RANGE_DAMAGE = 12,
+    SWING_DAMAGE = 12
+    --ENVIRONMENTAL_DAMAGE = 15
+}
+local function extract(...)
+    return select(relevantDmg[select(2,...)],...)
+end
 local f = CreateFrame("Frame","GDFRP")
 function f:UpdateArtifactTraits()
     local u,e,a=UIParent,"ARTIFACT_UPDATE",C_ArtifactUI
@@ -11,6 +21,10 @@ function f:UpdateArtifactTraits()
 end
 function f:TalentsUpdated()
     self.goet = select(4, GetTalentInfo(6,2,1))
+end
+function f:StatsUpdated()
+  self.m = GetMasteryEffect() / 100 + 1
+  self.v = (GetCombatRatingBonus(CR_VERSATILITY_DAMAGE_DONE) + GetVersatilityBonus(CR_VERSATILITY_DAMAGE_DONE)) / 100 + 1
 end
 function f:Clean(error)
     local t = GetTime()
@@ -44,6 +58,7 @@ function f:Init()
     self.charges, self.maxCharges = GetSpellCharges(self.frenzied)
     self:UpdateArtifactTraits()
     self:TalentsUpdated()
+    self:StatsUpdated()
 end
 function f:Predict()
     local ch = self.dmg * 0.5
@@ -54,8 +69,7 @@ function f:Predict()
     end
     local b = UnitBuff(p,self.goe)
     local m = b and 1.2 or 1
-    local v = GetCombatRatingBonus(CR_VERSATILITY_DAMAGE_DONE) / 100 + 1
-    self.pre = (ch > self.minHeal and ch or self.minHeal) * self.m * m * v * self.wf * nd
+    self.pre = (ch > self.minHeal and ch or self.minHeal) * self.m * m * self.v * self.wf * nd
     self.currentClr = (self.goet and b and self.clrUseTwo) or (self.goet and self.clr) or self.clrUseTwo
 end
 function f:Health()
@@ -68,7 +82,6 @@ f:SetScript("OnUpdate",function(s,elapsed)
         if s.sinceLastUpdate >= s.freq then
             s.sinceLastUpdate = 0
             s:Clean(s.freq/2)
-            s.m = tonumber(GetSpellDescription(f.mastery):match("%d+")) / 100 + 1
             s:Predict()
         end
 end)
@@ -79,45 +92,39 @@ local events = {
     "UNIT_AURA",
     "SPELL_UPDATE_CHARGES",
     "UPDATE_SHAPESHIFT_FORM",
-    "PLAYER_TALENT_UPDATE"
+    "PLAYER_TALENT_UPDATE",
+    "COMBAT_RATING_UPDATE"
 }
 for _,e in ipairs(events) do
     f:RegisterEvent(e)
 end
 f:SetScript("OnEvent", function(s,e,...)
-        local relevantDmg = {
-            SPELL_DAMAGE = 15,
-            SPELL_PERIODIC_DAMAGE = 15,
-            RANGE_DAMAGE = 12,
-            SWING_DAMAGE = 12
-            --ENVIRONMENTAL_DAMAGE = 15
-        }
-        local function extract(...)
-            return select(relevantDmg[select(2,...)],...)
-        end
-        if e == "COMBAT_LOG_EVENT_UNFILTERED" then
-            local id = UnitGUID(p)
-            if select(8,...) == id and relevantDmg[select(2,...)] then
-                local dmg = extract(...)
-                s.dmg = s.dmg + dmg
-                table.insert(s.dmgs, {GetTime()+5, dmg})
-                s:Predict()
-            elseif select(2,...) == "SPELL_CAST_SUCCESS" and select(4,...) == id and select(12,...) == 22842 then
-                s.lastHeal = s.pre
-            end
-        elseif e == "SPELLS_CHANGED" then
-            s:UpdateArtifactTraits()
-        elseif e == "SPELL_UPDATE_CHARGES" then
-            s.charges = GetSpellCharges(s.frenzied)
-        elseif e == "PLAYER_TALENT_UPDATE" then
-            s:TalentsUpdated()
-        else
-            s:Clean()
-            f:Health()
+    if e == "COMBAT_LOG_EVENT_UNFILTERED" then
+        local id = UnitGUID(p)
+        local se = select(2,...)
+        if select(8,...) == id and relevantDmg[se] then
+            local dmg = extract(...)
+            s.dmg = s.dmg + dmg
+            table.insert(s.dmgs, {GetTime()+5, dmg})
             s:Predict()
-            local n,_,_,_,_,d,e = UnitBuff(p ,s.frenzied)
-            s.hotRemaining = n and (e-GetTime()) / d * s.lastHeal or 0
+        elseif se == "SPELL_CAST_SUCCESS" and select(4,...) == id and select(12,...) == 22842 then
+            s.lastHeal = s.pre
         end
+    elseif e == "SPELLS_CHANGED" then
+        s:UpdateArtifactTraits()
+    elseif e == "SPELL_UPDATE_CHARGES" then
+        s.charges = GetSpellCharges(s.frenzied)
+    elseif e == "PLAYER_TALENT_UPDATE" then
+        s:TalentsUpdated()
+    elseif e == "COMBAT_RATING_UPDATE" then
+        s:StatsUpdated()
+    else
+        s:Clean()
+        f:Health()
+        s:Predict()
+        local n,_,_,_,_,d,e = UnitBuff(p ,s.frenzied)
+        s.hotRemaining = n and (e-GetTime()) / d * s.lastHeal or 0
+    end
 end)
 f:Init()
 aura_env.f = f
